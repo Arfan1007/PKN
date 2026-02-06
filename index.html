@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+  <meta charset="UTF-8">
+  <title>Kuis Kerja Sama di Lingkunganku</title>
+
+<!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+body{
+  margin:0;
+  font-family:Arial, sans-serif;
+  background:linear-gradient(135deg,#5b2ecc,#8e44ad);
+  color:white;
+  text-align:center;
+}
+.card{
+  background:white;
+  color:#333;
+  max-width:700px;
+  margin:40px auto;
+  padding:25px;
+  border-radius:15px;
+}
+input{
+  padding:12px;
+  width:90%;
+  margin:8px 0;
+}
+button{
+  width:100%;
+  padding:15px;
+  font-size:18px;
+  border:none;
+  border-radius:10px;
+  cursor:pointer;
+}
+.btn{
+  background:#3498db;
+  color:white;
+}
+.option{
+  background:#ecf0f1;
+  margin:8px 0;
+}
+.option:hover{background:#bdc3c7}
+.hidden{display:none}
+canvas{
+  position:fixed;
+  top:0;left:0;
+  pointer-events:none;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+}
+th,td{
+  border:1px solid #333;
+  padding:6px;
+  color:black;
+}
+</style>
+</head>
+
+<body>
+
+  <!-- CONFETTI -->
+  <canvas id="confetti"></canvas>
+
+  <!-- MUSIK LATAR -->
+  <audio id="bgm" loop>
+    <source src="musik.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- JOIN -->
+  <div class="card" id="joinBox">
+    <h1>🎮 Kuis Kerja Sama</h1>
+    <input id="nama" placeholder="Nama">
+    <input id="room" placeholder="Kode Room">
+    <button class="btn" onclick="joinGame()">Masuk</button>
+  </div>
+
+  <!-- QUIZ -->
+  <div class="card hidden" id="quizBox">
+    <h2 id="soalText"></h2>
+    <div id="opsiBox"></div>
+  </div>
+
+  <!-- HASIL -->
+  <div class="card hidden" id="hasilBox">
+    <h2>🏆 Ranking</h2>
+    <ol id="ranking"></ol>
+
+    <h3>📊 Rekap Nilai</h3>
+    <table>
+      <thead>
+        <tr><th>Nama</th><th>Skor</th><th>Waktu</th></tr>
+      </thead>
+      <tbody id="rekap"></tbody>
+    </table>
+  </div>
+
+    <script>
+    /* ================= FIREBASE ================= */
+    // 🔥 GANTI DENGAN CONFIG MILIKMU
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyAvtKOm8DVHkAgL8hj45cPSavBdfTiHXZE",
+      authDomain: "kuis-ppkn-kelas-4.firebaseapp.com",
+      databaseURL: "https://kuis-ppkn-kelas-4-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "kuis-ppkn-kelas-4",
+      storageBucket: "kuis-ppkn-kelas-4.firebasestorage.app",
+      messagingSenderId: "545398842380",
+      appId: "1:545398842380:web:07da560d30f4c6c4ee3a29",
+      measurementId: "G-4D4LCR09R1"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    /* ================= SOUND ================= */
+    const audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    function playSound(freq){
+      const osc=audioCtx.createOscillator();
+      osc.connect(audioCtx.destination);
+      osc.frequency.value=freq;
+      osc.start();
+      setTimeout(()=>osc.stop(),200);
+    }
+
+    /* ================= CONFETTI ================= */
+    const canvas=document.getElementById("confetti");
+    const ctx=canvas.getContext("2d");
+    canvas.width=innerWidth;
+    canvas.height=innerHeight;
+    let part=[];
+    function launchConfetti(){
+      for(let i=0;i<80;i++){
+        part.push({
+          x:Math.random()*canvas.width,
+          y:0,
+          r:Math.random()*6+4,
+          vy:Math.random()*3+2
+        });
+      }
+    }
+    function animate(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      part.forEach(p=>{
+        p.y+=p.vy;
+        ctx.fillStyle=`hsl(${Math.random()*360},100%,50%)`;
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fill();
+      });
+      part=part.filter(p=>p.y<canvas.height);
+      requestAnimationFrame(animate);
+    }
+    animate();
+
+    /* ================= SOAL (25) ================= */
+    const soal=[
+    {q:"Keberagaman artinya …",o:["Sama","Berbeda-beda","Sedikit","Banyak"],a:1},
+    {q:"Contoh keberagaman budaya adalah …",o:["Rumah sama","Tarian daerah","Baju sama","Bahasa sama"],a:1},
+    {q:"Sikap terhadap keberagaman adalah …",o:["Mengejek","Menghargai","Menolak","Membenci"],a:1},
+    {q:"Gotong royong artinya bekerja …",o:["Sendiri","Bersama","Diam","Malas"],a:1},
+    {q:"Membersihkan kelas bersama disebut …",o:["Bermain","Gotong royong","Belajar","Istirahat"],a:1},
+    {q:"Manfaat gotong royong adalah …",o:["Lama","Berat","Cepat selesai","Sulit"],a:2},
+    {q:"Gotong royong mencerminkan sila ke- …",o:["1","2","3","4"],a:2},
+    {q:"Kerja bakti dilakukan dengan sikap …",o:["Malas","Ikhlas","Terpaksa","Sendiri"],a:1},
+    {q:"Kompak artinya …",o:["Bersatu","Berpisah","Diam","Bertengkar"],a:0},
+    {q:"Sikap kompak membuat pekerjaan …",o:["Sulit","Lama","Ringan","Gagal"],a:2},
+    {q:"Persatuan membuat bangsa menjadi …",o:["Lemah","Kuat","Sedih","Hancur"],a:1},
+    {q:"Contoh bersatu di sekolah adalah …",o:["Bertengkar","Kerja kelompok","Mengejek","Menyendiri"],a:1},
+    {q:"Semboyan persatuan Indonesia adalah …",o:["Garuda","Pancasila","Bhinneka Tunggal Ika","UUD"],a:2},
+    {q:"Bahasa persatuan Indonesia adalah …",o:["Jawa","Sunda","Indonesia","Inggris"],a:2},
+    {q:"Bahasa Indonesia digunakan saat …",o:["Upacara","Tidur","Bermain","Mandi"],a:0},
+    {q:"Bahasa Indonesia memudahkan …",o:["Pertengkaran","Komunikasi","Permusuhan","Masalah"],a:1},
+    {q:"Menggunakan Bahasa Indonesia menunjukkan sikap …",o:["Malas","Cinta tanah air","Sombong","Marah"],a:1},
+    {q:"Bahasa Indonesia menyatukan bangsa yang …",o:["Sama","Berbeda","Sedikit","Jauh"],a:1},
+    {q:"Menghargai perbedaan menunjukkan sikap …",o:["Toleransi","Egois","Marah","Malas"],a:0},
+    {q:"Gotong royong menciptakan …",o:["Permusuhan","Kebersamaan","Masalah","Sedih"],a:1},
+    {q:"Bersatu membuat hidup menjadi …",o:["Sulit","Rukun","Berat","Kacau"],a:1},
+    {q:"Bahasa Indonesia harus digunakan dengan …",o:["Baik","Sembarangan","Marah","Cepat"],a:0},
+    {q:"Kerja sama dilakukan dengan sikap …",o:["Ikhlas","Egois","Malas","Menyerah"],a:0},
+    {q:"Contoh kerja sama di rumah adalah …",o:["Bertengkar","Membersihkan rumah","Tidur","Bermain"],a:1},
+    {q:"Kerja sama membuat pekerjaan menjadi …",o:["Berat","Cepat selesai","Sulit","Lama"],a:1}
+    ];
+
+    let index=0, skor=0, nama="", room="60298";
+
+    /* ================= GAME ================= */
+    function joinGame(){
+      nama=document.getElementById("nama").value;
+      room=document.getElementById("room").value;
+      if(!nama||!room){alert("Nama & kode room wajib diisi");return;}
+
+      const bgm=document.getElementById("bgm");
+      bgm.volume=0.3;
+      bgm.play();
+
+      document.getElementById("joinBox").classList.add("hidden");
+      document.getElementById("quizBox").classList.remove("hidden");
+      tampilSoal();
+    }
+
+    function tampilSoal(){
+      document.getElementById("soalText").innerText=soal[index].q;
+      const box=document.getElementById("opsiBox");
+      box.innerHTML="";
+      soal[index].o.forEach((x,i)=>{
+        const btn=document.createElement("button");
+        btn.className="option";
+        btn.innerText=x;
+        btn.onclick=()=>jawab(i);
+        box.appendChild(btn);
+      });
+    }
+
+    function jawab(p){
+      if(p===soal[index].a){
+        skor+=4;
+        playSound(700);
+        launchConfetti();
+      }else{
+        playSound(200);
+      }
+      index++;
+      index<soal.length ? tampilSoal() : selesai();
+    }
+
+    function selesai(){
+      document.getElementById("quizBox").classList.add("hidden");
+      document.getElementById("hasilBox").classList.remove("hidden");
+
+      db.ref("rooms/"+room+"/"+nama).set({
+        skor:skor,
+        waktu:new Date().toLocaleString()
+      });
+
+      db.ref("rooms/"+room).on("value",snap=>{
+        document.getElementById("ranking").innerHTML="";
+        document.getElementById("rekap").innerHTML="";
+        let data=[];
+        snap.forEach(d=>{
+          data.push({nama:d.key,skor:d.val().skor,waktu:d.val().waktu});
+        });
+        data.sort((a,b)=>b.skor-a.skor);
+        data.forEach(d=>{
+          document.getElementById("ranking").innerHTML+=`<li>${d.nama} - ${d.skor}</li>`;
+          document.getElementById("rekap").innerHTML+=`
+            <tr><td>${d.nama}</td><td>${d.skor}</td><td>${d.waktu}</td></tr>`;
+        });
+      });
+    }
+    </script>
+
+  </body>
+</html>
